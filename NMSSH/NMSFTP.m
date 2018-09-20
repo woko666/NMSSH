@@ -250,6 +250,48 @@
     return [self readContentsAtPath:path toStream:outputStream progress:progress];
 }
 
+- (BOOL)contentsAtPath:(nonnull NSString *)path offset:(NSUInteger)offset length:(NSUInteger)length callback:(BOOL (^)(NSData* data))callback {
+    LIBSSH2_SFTP_HANDLE *handle = [self openFileAtPath:path flags:LIBSSH2_FXF_READ mode:0];
+    
+    if (!handle) {
+        return NO;
+    }
+    
+    NMSFTPFile *file = [self infoForFileAtPath:path];
+    if (!file) {
+        NMSSHLogWarn(@"contentsAtPath:progress: failed to get file attributes");
+        return NO;
+    }
+    
+    if (offset > 0) {
+        libssh2_sftp_seek64(handle,offset);
+    }
+    char buffer[self.bufferSize];
+    ssize_t rc;
+    NSUInteger got = 0;
+    while ((rc = libssh2_sftp_read(handle, buffer, (ssize_t)sizeof(buffer))) > 0) {
+        NSData* data = [NSData dataWithBytes:(const void *)buffer length:rc];
+        if (!callback(data)) {
+            libssh2_sftp_close(handle);
+            return YES;
+        }
+        
+        got += rc;
+        if (got >= length) {
+            libssh2_sftp_close(handle);
+            return YES;
+        }
+    }
+    
+    libssh2_sftp_close(handle);
+    
+    if (rc < 0) {
+        return NO;
+    }
+    
+    return YES;
+}
+
 - (BOOL)readContentsAtPath:(NSString *)path toStream:(NSOutputStream *)outputStream progress:(BOOL (^)(NSUInteger, NSUInteger))progress {
     LIBSSH2_SFTP_HANDLE *handle = [self openFileAtPath:path flags:LIBSSH2_FXF_READ mode:0];
     

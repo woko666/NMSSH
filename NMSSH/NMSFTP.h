@@ -175,6 +175,7 @@
  */
 - (BOOL)contentsAtPath:(nonnull NSString *)path toStream:(nonnull NSOutputStream *)stream progress:(BOOL (^_Nullable)(NSUInteger, NSUInteger))progress;
 
+- (BOOL)contentsAtPath:(nonnull NSString *)path offset:(NSUInteger)offset length:(NSUInteger)length callback:(BOOL (^)(NSData* data))callback;
 /**
  Overwrite the contents of a file
 
