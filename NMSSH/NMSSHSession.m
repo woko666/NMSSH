@@ -50,6 +50,7 @@
         [self setUsername:username];
         [self setConnected:NO];
         [self setFingerprintHash:NMSSHSessionHashMD5];
+        [self setResolving:NO];
     }
 
     return self;
@@ -117,6 +118,8 @@
     NSArray *hostComponents = [_host componentsSeparatedByString:@":"];
     NSInteger components = [hostComponents count];
     NSString *address = hostComponents[0];
+    dispatch_queue_t timeoutQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, 5 * 1000 * 1000 * 1000ull);
 
     // Check if the host is [{IPv6}]:{port}
     if (components >= 4 && [hostComponents[0] hasPrefix:@"["] && [hostComponents[components-2] hasSuffix:@"]"]) {
@@ -126,21 +129,41 @@
         address = _host;
     }
 
-    CFHostRef host = CFHostCreateWithName(kCFAllocatorDefault, (__bridge CFStringRef)address);
+    volatile CFHostRef host = CFHostCreateWithName(kCFAllocatorDefault, (__bridge CFStringRef)address);
     CFStreamError error;
     NSArray *addresses = nil;
+    int index = arc4random();
 
     if (host) {
-        NMSSHLogVerbose(@"Start %@ resolution", address);
+        NMSSHLogVerbose(@"Start %@ resolution %d", address, index);
 
+        dispatch_after(timeout, timeoutQueue,
+       ^{
+           @synchronized(self) {
+               if ([self resolving]) {
+                   [self setResolving:NO];
+                   NMSSHLogError(@"Timeout limit reached, canceling %@ %d",address,index);
+                   CFHostCancelInfoResolution(host, kCFHostAddresses);
+                   CFRelease(host);
+               }
+           }
+       }
+       );
+        
+        [self setResolving:YES];
         if (CFHostStartInfoResolution(host, kCFHostAddresses, &error)) {
             addresses = (__bridge NSArray *)(CFHostGetAddressing(host, NULL));
         }
         else {
-            NMSSHLogError(@"Unable to resolve host %@", address);
+            NMSSHLogError(@"Unable to resolve host %@ %d", address, index);
         }
-
-        CFRelease(host);
+        @synchronized(self) {
+            if ([self resolving]) {
+                [self setResolving:NO];
+                CFRelease(host);
+            }
+        }
+        
     }
     else {
         NMSSHLogError(@"Error allocating CFHost for %@", address);

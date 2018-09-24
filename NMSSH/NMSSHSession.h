@@ -62,6 +62,8 @@ typedef NS_ENUM(NSInteger, NMSSHKnownHostStatus) {
  */
 @property (nonatomic, nullable, readonly) NMSSHHostConfig *hostConfig;
 
+@property (nonatomic, assign) BOOL resolving;
+
 /// ----------------------------------------------------------------------------
 /// @name Initialize a new SSH session
 /// ----------------------------------------------------------------------------
